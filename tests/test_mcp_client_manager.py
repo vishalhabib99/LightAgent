@@ -197,3 +197,73 @@ def test_streamable_http_uses_async_credential_provider(monkeypatch):
         "url": "https://mcp.example.test",
         "headers": {"X-Client": "LightAgent", "Authorization": "Bearer dynamic-token"},
     }
+
+
+def test_streamable_http_works_on_mcp_2_without_streamablehttp_client(monkeypatch):
+    # mcp 2.x removed streamablehttp_client; streamable_http_client takes an httpx client
+    # (which carries the headers) and yields (read, write) instead of three streams.
+    from LightAgent import mcp_client_manager as mcp_module
+
+    captured = {}
+
+    class AsyncContext:
+        def __init__(self, value):
+            self.value = value
+
+        async def __aenter__(self):
+            return self.value
+
+        async def __aexit__(self, exc_type, exc, traceback):
+            return False
+
+    class InitializedSession:
+        initialized = False
+
+        async def initialize(self):
+            self.initialized = True
+
+    def http_client_factory(*, headers):
+        captured["headers"] = headers
+        return AsyncContext("http-client")
+
+    def streamable_client(*, url, http_client):
+        captured.update(url=url, http_client=http_client)
+        return AsyncContext(("reader", "writer"))
+
+    initialized = InitializedSession()
+    monkeypatch.setattr(mcp_module, "streamablehttp_client", None)
+    monkeypatch.setattr(mcp_module, "streamable_http_client", streamable_client)
+    monkeypatch.setattr(mcp_module, "create_mcp_http_client", http_client_factory)
+    monkeypatch.setattr(
+        mcp_module,
+        "ClientSession",
+        lambda *streams: captured.update(streams=streams) or AsyncContext(initialized),
+    )
+
+    manager = MCPClientManager(
+        {
+            "mcpServers": {
+                "remote": {
+                    "transport": "streamable-http",
+                    "url": "https://mcp.example.test",
+                    "headers": {"X-Client": "LightAgent"},
+                }
+            }
+        },
+        ToolRegistry(),
+    )
+
+    async def scenario():
+        await manager._create_session("remote", manager.config["mcpServers"]["remote"])
+        assert manager.server_sessions["remote"] is initialized
+        await manager.cleanup()
+
+    asyncio.run(scenario())
+
+    assert initialized.initialized
+    assert captured == {
+        "headers": {"X-Client": "LightAgent"},
+        "url": "https://mcp.example.test",
+        "http_client": "http-client",
+        "streams": ("reader", "writer"),
+    }

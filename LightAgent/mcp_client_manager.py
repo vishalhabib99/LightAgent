@@ -16,8 +16,14 @@ from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 try:
     from mcp.client.streamable_http import streamablehttp_client
-except ImportError:  # Older MCP SDKs retain stdio/SSE compatibility.
+except ImportError:  # removed in mcp 2.x; very old SDKs have no Streamable HTTP at all
     streamablehttp_client = None
+try:
+    # mcp 1.24+ and 2.x; headers go on the httpx client instead of a keyword argument
+    from mcp.client.streamable_http import streamable_http_client
+    from mcp.shared._httpx_utils import create_mcp_http_client
+except ImportError:
+    streamable_http_client = None
 from contextlib import AsyncExitStack
 
 from .tools import ToolRegistry  # 关键修改：从当前包导入
@@ -48,9 +54,13 @@ class MCPClientManager:
             headers.update(dict(supplied or {}))
         transport_name = str(config.get("transport", "")).lower()
         if transport_name in {"streamable-http", "streamable_http", "http"}:
-            if streamablehttp_client is None:
+            if streamablehttp_client is not None:
+                streams_context = streamablehttp_client(url=config['url'], headers=headers)
+            elif streamable_http_client is not None:
+                http_client = await self.exit_stack.enter_async_context(create_mcp_http_client(headers=headers))
+                streams_context = streamable_http_client(url=config['url'], http_client=http_client)
+            else:
                 raise RuntimeError("installed MCP SDK does not support Streamable HTTP")
-            streams_context = streamablehttp_client(url=config['url'], headers=headers)
             streams = await self.exit_stack.enter_async_context(streams_context)
             session_context = ClientSession(*streams[:2])
             self.session = await self.exit_stack.enter_async_context(session_context)

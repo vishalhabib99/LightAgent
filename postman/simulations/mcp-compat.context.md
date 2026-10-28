@@ -28,6 +28,8 @@ or external server is required. The probe accepts only local URLs.
   are outside this check. (contract fixture, 2026-10-28)
 - `X-LightAgent-Test` carries a non-secret sentinel; a provider overrides the
   static value. No real credential belongs in this fixture. (observed 2026-10-28)
+- Legacy SDK tests need the historical Pydantic combination. CI pins 2.10.4
+  from poetry.lock for MCP 1.12.4; modern SDK jobs use 2.12+. (observed 2026-10-28)
 
 ## Observations
 
@@ -44,3 +46,6 @@ The echo confirmed credential-header propagation and the probe confirmed cleanup
 - 2026-10-28: MCP 2.3.0 connected but failed before tools/call with
   `AttributeError: 'Tool' object has no attribute 'inputSchema'`. The manager
   now supports the SDK's `input_schema` field as well as the older spelling.
+- 2026-10-28: fresh MCP 1.12.4 installation with latest Pydantic failed to
+  import `eval_type_backport` before any request. The historical dependency
+  job now retains the repository's locked Pydantic rather than latest.

@@ -484,6 +484,10 @@ stateless HTTP probe is documented in
 [`postman/simulations/mcp-compat.context.md`](../postman/simulations/mcp-compat.context.md);
 it verifies real SDK initialization, tool listing/calling, credential headers,
 and cleanup without contacting a production MCP service.
+The historical 1.12.4 job retains the lock file's Pydantic 2.10.4: that SDK
+imports a private Pydantic function removed in newer releases. This is a
+supported historical dependency combination, not a claim that old MCP SDKs
+work with arbitrary new Pydantic versions. Modern jobs use Pydantic 2.12+.
 
 Header values are sent literally. In this example, Python reads the environment
 variable; LightAgent does not expand environment placeholders inside the header.
